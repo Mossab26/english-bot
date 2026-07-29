@@ -8,9 +8,11 @@ from telegram.ext import (
 
 from handlers.translation import handle_translation_text
 from handlers.chat import handle_chat_text
-from handlers.grammar import show_grammar_menu, show_grammar_topic
+from handlers.grammar import show_grammar_menu, show_grammar_topic, GRAMMAR_TOPICS
 from handlers.games import send_new_question, handle_game_answer
 from handlers.reading import send_reading_text
+from handlers.synonyms import handle_synonyms_text
+from handlers.shadowing import handle_shadowing_text
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -29,14 +31,13 @@ def main_menu_buttons():
         [InlineKeyboardButton("💬 الدردشة مع AI", callback_data="mode_chat")],
         [InlineKeyboardButton("🎮 الألعاب", callback_data="game_new")],
         [InlineKeyboardButton("📚 نصوص للقراءة", callback_data="reading_menu")],
+        [InlineKeyboardButton("🔤 المرادفات", callback_data="mode_synonyms")],
+        [InlineKeyboardButton("🎧 Shadowing (تكرار النطق)", callback_data="mode_shadowing")],
     ]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['mode'] = None
-    await update.message.reply_text(
-        WELCOME_MESSAGE,
-        reply_markup=InlineKeyboardMarkup(main_menu_buttons())
-    )
+    await update.message.reply_text(WELCOME_MESSAGE, reply_markup=InlineKeyboardMarkup(main_menu_buttons()))
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -56,6 +57,18 @@ async def activate_chat_mode(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['mode'] = 'chat'
     await query.edit_message_text("💬 اكتب أي جملة بالإنجليزية وسنتحدث معك ونصحح أخطاءك.")
 
+async def activate_synonyms_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data['mode'] = 'synonyms'
+    await query.edit_message_text("🔤 أرسل الكلمة التي تريد معرفة مرادفاتها.")
+
+async def activate_shadowing_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data['mode'] = 'shadowing'
+    await query.edit_message_text("🎧 أرسل نصًا إنجليزيًا قصيرًا وسأحوله إلى صوت لتتدرب على نطقه.")
+
 async def show_reading_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -73,6 +86,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_translation_text(update, context)
     elif mode == 'chat':
         await handle_chat_text(update, context)
+    elif mode == 'synonyms':
+        await handle_synonyms_text(update, context)
+    elif mode == 'shadowing':
+        await handle_shadowing_text(update, context)
     else:
         await update.message.reply_text("الرجاء استخدام الأمر /start واختيار قسم أولًا 🌿")
 
@@ -85,6 +102,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await activate_translation_mode(update, context)
     elif data == "mode_chat":
         await activate_chat_mode(update, context)
+    elif data == "mode_synonyms":
+        await activate_synonyms_mode(update, context)
+    elif data == "mode_shadowing":
+        await activate_shadowing_mode(update, context)
     elif data == "grammar_menu":
         await show_grammar_menu(update, context)
     elif data.startswith("grammar_topic:"):
@@ -100,18 +121,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         level = data.split(":")[1]
         await send_reading_text(update, context, level)
 
-# ------- أوامر مختصرة تظهر في المربع الأزرق (Menu) بجانب حقل الكتابة -------
+# ------- أوامر تظهر في المربع الأزرق -------
 async def cmd_translate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['mode'] = 'translation'
     await update.message.reply_text("✍️ أرسل النص الذي ترغب في ترجمته (عربي أو إنجليزي).")
 
 async def cmd_grammar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    buttons = [
-        [InlineKeyboardButton(t["title"], callback_data=f"grammar_topic:{k}")]
-        for k, t in __import__("handlers.grammar", fromlist=["GRAMMAR_TOPICS"]).GRAMMAR_TOPICS.items()
-    ]
-    buttons.append([InlineKeyboardButton("🔙 رجوع", callback_data="main_menu")])
-    await update.message.reply_text("📖 اختر الموضوع الذي ترغب في مراجعته:", reply_markup=InlineKeyboardMarkup(buttons))
+    items = list(GRAMMAR_TOPICS.items())
+    buttons = []
+    for i in range(0, len(items), 2):
+        row = [InlineKeyboardButton(items[i][1]["title"], callback_data=f"grammar_topic:{items[i][0]}")]
+        if i + 1 < len(items):
+            row.append(InlineKeyboardButton(items[i+1][1]["title"], callback_data=f"grammar_topic:{items[i+1][0]}"))
+        buttons.append(row)
+    await update.message.reply_text("📖 اختر المستوى الذي ترغب في مراجعته:", reply_markup=InlineKeyboardMarkup(buttons))
 
 async def cmd_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['mode'] = 'chat'
@@ -128,8 +151,15 @@ async def cmd_reading(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("📚 اختر مستواك:", reply_markup=InlineKeyboardMarkup(buttons))
 
+async def cmd_synonyms(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['mode'] = 'synonyms'
+    await update.message.reply_text("🔤 أرسل الكلمة التي تريد معرفة مرادفاتها.")
+
+async def cmd_shadowing(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['mode'] = 'shadowing'
+    await update.message.reply_text("🎧 أرسل نصًا إنجليزيًا قصيرًا وسأحوله إلى صوت.")
+
 async def post_init(application: Application):
-    """يسجل الأوامر لتظهر في المربع الأزرق بجانب حقل الكتابة"""
     commands = [
         BotCommand("start", "🌿 القائمة الرئيسية"),
         BotCommand("translate", "🌍 الترجمة"),
@@ -137,6 +167,8 @@ async def post_init(application: Application):
         BotCommand("chat", "💬 الدردشة مع AI"),
         BotCommand("games", "🎮 الألعاب"),
         BotCommand("reading", "📚 نصوص للقراءة"),
+        BotCommand("synonyms", "🔤 المرادفات"),
+        BotCommand("shadowing", "🎧 Shadowing"),
     ]
     await application.bot.set_my_commands(commands)
 
@@ -149,6 +181,8 @@ def main():
     app.add_handler(CommandHandler("chat", cmd_chat))
     app.add_handler(CommandHandler("games", cmd_games))
     app.add_handler(CommandHandler("reading", cmd_reading))
+    app.add_handler(CommandHandler("synonyms", cmd_synonyms))
+    app.add_handler(CommandHandler("shadowing", cmd_shadowing))
 
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
