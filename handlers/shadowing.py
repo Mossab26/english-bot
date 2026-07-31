@@ -4,15 +4,17 @@ from gtts import gTTS
 from telegram import Update
 from telegram.ext import ContextTypes
 
+MAX_CHARS = 3000  # حوالي 500 كلمة
+
 async def handle_shadowing_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """يحول النص الإنجليزي المرسل إلى ملف صوتي للتدرب على النطق"""
     text = update.message.text.strip()
 
-    if len(text) > 500:
-        await update.message.reply_text("⚠️ الرجاء إرسال نص أقصر (500 حرف كحد أقصى).")
+    if len(text) > MAX_CHARS:
+        await update.message.reply_text(f"⚠️ الرجاء إرسال نص أقصر ({MAX_CHARS} حرف كحد أقصى، أرسلت {len(text)}).")
         return
 
-    await update.message.reply_text("🎧 جارٍ تحويل النص إلى صوت...")
+    await update.message.reply_text("🎧 جارٍ تحويل النص إلى صوت، قد يستغرق الأمر بعض الوقت للنصوص الطويلة...")
 
     try:
         tts = gTTS(text=text, lang='en')
